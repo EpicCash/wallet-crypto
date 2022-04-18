@@ -1,5 +1,3 @@
-import time
-
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
@@ -10,6 +8,7 @@ from hashlib import pbkdf2_hmac, sha3_256
 from typing import Union
 import binascii
 import base64
+import time
 import json
 import os
 
