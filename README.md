@@ -5,9 +5,8 @@
     from_bytes() -> Initialize epic-wallet from seed (bytes)
     from_mnemonic() -> Initialize epic-wallet from mnemonic seed-phrase (str)
     from_encrypted_seed() -> Initialize epic-wallet from previously encrypted seed (dict)
-    get_tor_address() -> Generate onion TOR address for epic-wallet listener
+    save_to_file() -> Save encrypted wallet seed data in file (JSON)
     seed_as_str() -> Return wallet seed as string
-
 
 ## Packages
 `pip install cryptography`
