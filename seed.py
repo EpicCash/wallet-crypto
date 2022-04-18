@@ -175,14 +175,14 @@ class WalletSeed:
         self.public_key = key_pair.public_key().public_bytes(
             encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
             )
-
-    def _tor_address(self) -> None:
-        """
-        Generale TOR address from wallet public key
-        """
-        version = b"\x03"
-        checksum = sha3_256(b".onion checksum" + self.public_key + version).digest()
-        self.tor_address = base64.b32encode(self.public_key + checksum[0:2] + version).lower()
+    # TODO: Not valid
+    # def _tor_address(self) -> None:
+    #     """
+    #     Generale TOR address from wallet public key
+    #     """
+    #     version = b"\x03"
+    #     checksum = sha3_256(b".onion checksum" + self.public_key + version).digest()
+    #     self.tor_address = base64.b32encode(self.public_key + checksum[0:2] + version).lower()
 
     def _info(self) -> None:
         """
@@ -191,10 +191,10 @@ class WalletSeed:
         seed = f"Seed (PrivateKey): {self.seed_as_str()}"
         title = f"\n// Epic-Cash Wallet Summary:"
         mnemonics = f"Mnemonics: {self.mnemonics}"
-        public_key = f"PublicKey: {self.public_key_as_str()}"
-        tor_address = f"TOR Address: {self.tor_address_as_str()}\n"
+        public_key = f"PublicKey: {self.public_key_as_str()}\n"
+        # tor_address = f"TOR Address: {self.tor_address_as_str()}\n"
 
-        self.info = '\n'.join([title, seed, public_key, mnemonics, tor_address])
+        self.info = '\n'.join([title, seed, public_key, mnemonics])
 
     def seed_as_str(self) -> str:
         """
@@ -208,11 +208,11 @@ class WalletSeed:
         """
         return self._bytes_to_str(self.public_key)
 
-    def tor_address_as_str(self) -> str:
-        """
-        :return: str, TOR address as string
-        """
-        return self.tor_address.decode('utf-8')
+    # def tor_address_as_str(self) -> str:
+    #     """
+    #     :return: str, TOR address as string
+    #     """
+    #     return self.tor_address.decode('utf-8')
 
     def new(self, password: str = ''):
         """
@@ -240,7 +240,7 @@ class WalletSeed:
         self.seed = seed
         self._mnemonic_from_seed()
         self._public_key_from_seed()
-        self._tor_address()
+        # self._tor_address()
         self._info()
 
         return self
