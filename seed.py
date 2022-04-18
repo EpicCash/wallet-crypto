@@ -1,7 +1,7 @@
-from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives import serialization
+from cryptography.exceptions import InvalidTag
 import mnemonic
 
 from hashlib import pbkdf2_hmac, sha3_256
