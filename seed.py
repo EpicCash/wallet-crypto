@@ -108,7 +108,9 @@ class WalletSeed:
 
     def _decrypt_seed(self, password: str, data: dict) -> [bytes, None]:
         """
-        Decrypt encrypted seed data, keys: encrypted_seed, nonce, salt
+        Decrypt encrypted seed data
+        :param password: str,
+        :param data: dict, keys: encrypted_seed, nonce, salt
         :return: bytes, decrypted seed
         """
         # Validate data dict
@@ -135,6 +137,7 @@ class WalletSeed:
     def _encrypt_seed(self, password: str = '') -> dict:
         """
         Generate encrypted seed and return it with nonce and salt
+        :param password: str,
         :return: dict, encrypted seed, nonce and salt
         """
         # Generate random bytes for nonce and salt
@@ -160,7 +163,6 @@ class WalletSeed:
     def _mnemonic_from_seed(self) -> None:
         """
         Generate mnemonics from seed
-        :return: str, mnemonic seed-phrase
         """
         mnemonic_obj = mnemonic.Mnemonic("english")
         self.mnemonics = mnemonic_obj.to_mnemonic(self.seed)
@@ -168,7 +170,6 @@ class WalletSeed:
     def _public_key_from_seed(self) -> None:
         """
         Generate key pair from seed and return PublicKey
-        :return: bytes, PublicKey
         """
         key_pair = Ed25519PrivateKey.from_private_bytes(self.seed)
         self.public_key = key_pair.public_key().public_bytes(
@@ -184,6 +185,9 @@ class WalletSeed:
         self.tor_address = base64.b32encode(self.public_key + checksum[0:2] + version).lower()
 
     def _info(self) -> None:
+        """
+        Generate wallet summary string
+        """
         seed = f"Seed (PrivateKey): {self.seed_as_str()}"
         title = f"\n// Epic-Cash Wallet Summary:"
         mnemonics = f"Mnemonics: {self.mnemonics}"
@@ -225,6 +229,7 @@ class WalletSeed:
     def from_seed(self, seed: Union[bytes, str]):
         """
         Initialize new epic-wallet instance from seed (random_bytes, 32)
+        :return: wallet instance
         """
         if isinstance(seed, str):
             try:
@@ -243,8 +248,10 @@ class WalletSeed:
     def from_encrypted_seed(self, password: str, encrypted_seed: dict):
         """
         Initialize new epic-wallet instance from previously encrypted seed
+        :return: wallet instance
         """
         seed = self._decrypt_seed(password=password, data=encrypted_seed)
+
         if seed:
             self.from_seed(seed)
             return self
