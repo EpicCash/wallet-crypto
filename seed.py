@@ -1,13 +1,11 @@
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives import serialization
-from cryptography.exceptions import InvalidTag
 import mnemonic
 
-from hashlib import pbkdf2_hmac, sha3_256
+from hashlib import pbkdf2_hmac
 from typing import Union
 import binascii
-import base64
 import time
 import json
 import os
@@ -21,9 +19,7 @@ class WalletSeed:
     from_bytes() -> Initialize epic-wallet from seed (bytes)
     from_mnemonic() -> Initialize epic-wallet from mnemonic seed-phrase (str)
     from_encrypted_seed() -> Initialize epic-wallet from previously encrypted seed (dict)
-    get_tor_address() -> Generate onion TOR address for epic-wallet listener
     seed_as_str() -> Return wallet seed as string
-
     """
 
     SEED_FILE_NAME = 'wallet.seed'
@@ -35,35 +31,40 @@ class WalletSeed:
     seed: bytes = None
     mnemonics: str = None
     public_key: bytes = None
-    tor_address: bytes = None
     encrypted_seed_data: dict = None
 
-    def __init__(self,
-                 seed: bytes = None,
-                 password: str = '',
-                 mnemonics: str = None,
-                 encrypted_seed: dict = None):
+    def __init__(self, password: str = None,
+                 seed: Union[bytes, str] = None,
+                 mnemonics: Union[str, list] = None,
+                 encrypted_seed: Union[dict, str] = None):
 
         if seed:
-            self.from_seed(seed=seed)
+            if self.from_seed(seed=seed):
+                print(f'Successful wallet initialization from seed!')
 
         elif mnemonics:
-            self.from_mnemonic(mnemonics=mnemonics)
+            if self.from_mnemonic(mnemonics=mnemonics):
+                print(f'Successful wallet initialization from mnemonics!')
 
         elif encrypted_seed:
-            self.from_encrypted_seed(password=password, encrypted_seed=encrypted_seed)
+            if self.from_encrypted_seed(password=password, encrypted_seed=encrypted_seed):
+                print(f'Successful wallet initialization from encrypted seed!')
 
         else:
-            self.new(password=password)
+            if password:
+                if self.new(password=password):
+                    print(f'Successful new wallet initialization!')
 
         self._info()
 
     @staticmethod
     def _valid_mnemonics(mnemonics):
         """
-        Basic validation of mnemonics input
+        Validation of mnemonics input
         """
-        return len(mnemonics.split(' ')) in [12 or 24]
+        return mnemonic.Mnemonic(language='english').check(mnemonics) \
+               and (len(mnemonics.split(' ')) == 12
+                    or len(mnemonics.split(' ')) == 24)
 
     @staticmethod
     def _str_to_bytes(data: str) -> bytes:
@@ -81,10 +82,10 @@ class WalletSeed:
 
     def _generate_key(self, password: str, salt: bytes):
         """
-        Generate HMAC512 PrivateKey used to wallet encryption
+        Generate HMAC512 Key, needed for wallet seed encryption
         :param password: str
         :param salt: bytes
-        :return: bytes, PrivateKey
+        :return: bytes, Key
         """
         if isinstance(password, str):
             password = password.encode('utf-8')
@@ -92,16 +93,16 @@ class WalletSeed:
         return pbkdf2_hmac("sha512", password,
                            salt, self.ITERATIONS, self.U_SIZE)
 
-    def _encrypted_seed_to_file(self, path: str) -> None:
+    def _encrypted_seed_to_file(self, password: str, path: str) -> None:
         """
         Save encrypted seed data to wallet seed file (JSON)
         :param path: str, directory and file name for wallet seed file
         """
-        if not self.encrypted_seed_data:
-            try:
-                self._encrypt_seed()
-            except Exception:
-                raise Exception("Error: can not create wallet seed file")
+        try:
+            self._encrypt_seed(password=password)
+        except Exception:
+            print("ERROR: can not create wallet seed file")
+            return
 
         with open(path, 'w') as file:
             json.dump(self.encrypted_seed_data, file, indent=2)
@@ -117,6 +118,10 @@ class WalletSeed:
         if not isinstance(data, dict) or len(data) < 3:
             raise Exception('Invalid data to decrypt wallet seed')
 
+        # Check against not provided password (None is different than '')
+        if password is None:
+            return
+
         # Parse data dict from strings to bytes
         salt = self._str_to_bytes(data['salt'])
         nonce = self._str_to_bytes(data['nonce'])
@@ -128,13 +133,13 @@ class WalletSeed:
             cypher = ChaCha20Poly1305(enc_key)
             decrypted_seed = cypher.decrypt(nonce, encrypted_seed, associated_data=None)
 
-        except InvalidTag:
-            print('ERROR: Invalid password')
+        except Exception as e:
+            print(e)
             return
 
         return decrypted_seed
 
-    def _encrypt_seed(self, password: str = '') -> dict:
+    def _encrypt_seed(self, password: str) -> dict:
         """
         Generate encrypted seed and return it with nonce and salt
         :param password: str,
@@ -175,26 +180,45 @@ class WalletSeed:
         self.public_key = key_pair.public_key().public_bytes(
             encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
             )
-    # TODO: Not valid
-    # def _tor_address(self) -> None:
-    #     """
-    #     Generale TOR address from wallet public key
-    #     """
-    #     version = b"\x03"
-    #     checksum = sha3_256(b".onion checksum" + self.public_key + version).digest()
-    #     self.tor_address = base64.b32encode(self.public_key + checksum[0:2] + version).lower()
 
     def _info(self) -> None:
         """
         Generate wallet summary string
         """
-        seed = f"Seed (PrivateKey): {self.seed_as_str()}"
-        title = f"\n// Epic-Cash Wallet Summary:"
-        mnemonics = f"Mnemonics: {self.mnemonics}"
-        public_key = f"PublicKey: {self.public_key_as_str()}\n"
-        # tor_address = f"TOR Address: {self.tor_address_as_str()}\n"
+        title = f"\n// --- Epic-Cash Wallet Summary --- \\\\"
+        footer = f"// ------- End Wallet Summary ------- \\\\\n"
 
-        self.info = '\n'.join([title, seed, public_key, mnemonics])
+        try:
+            pretty_mnemonics = f"{' '.join(self.mnemonics.split(' ')[:11])}\n" \
+                               f"{' '.join(self.mnemonics.split(' ')[11:])}"
+
+            seed = f"Seed (PrivateKey): {self.seed_as_str()}"
+            mnemonics = f"Mnemonics: {pretty_mnemonics}"
+            public_key = f"PublicKey: {self.public_key_as_str()}"
+
+            self.info = '\n'.join([title, seed, public_key, mnemonics, footer])
+
+        except Exception:
+            no_seed = f"WALLET NOT INITIALIZED\n"
+            self.info = '\n'.join([title, no_seed, footer])
+
+    def to_dict(self, json_: bool = False) -> Union[dict, str]:
+        """
+        Serialize instance to python dict
+        :param json_: bool, if True return JSON string
+        :return:
+        """
+        data = {
+            'seed': self.seed_as_str(),
+            'mnemonics': self.mnemonics,
+            'public_key': self.public_key_as_str(),
+            'encrypted_seed_data': self.encrypted_seed_data
+            }
+
+        if json_:
+            data = json.dumps(data)
+
+        return data
 
     def seed_as_str(self) -> str:
         """
@@ -208,53 +232,81 @@ class WalletSeed:
         """
         return self._bytes_to_str(self.public_key)
 
-    # def tor_address_as_str(self) -> str:
-    #     """
-    #     :return: str, TOR address as string
-    #     """
-    #     return self.tor_address.decode('utf-8')
-
-    def new(self, password: str = ''):
+    def new(self, password: str):
         """
         Generate new seed and create new wallet instance
-        :param password: string, optional (to encrypt seed)
+        :param password: string, to encrypt seed
         :return: wallet instance
         """
-        seed = os.urandom(self.U_SIZE)
-        self.from_seed(seed)
-        self._encrypt_seed(password=password)
+        try:
+            seed = os.urandom(self.U_SIZE)
+            self.from_seed(seed)
+            self._encrypt_seed(password=password)
+        except Exception as e:
+            print(e)
+            return
 
         return self
 
     def from_seed(self, seed: Union[bytes, str]):
         """
         Initialize new epic-wallet instance from seed (random_bytes, 32)
+        :param seed: bytes or str representation of 32 random bytes
         :return: wallet instance
         """
         if isinstance(seed, str):
             try:
                 seed = binascii.unhexlify(seed)
             except Exception as e:
-                print(e)
+                print(f"ERROR: Invalid seed\n{e}")
+                return
+        try:
+            self.seed = seed
+            self._mnemonic_from_seed()
+            self._public_key_from_seed()
 
-        self.seed = seed
-        self._mnemonic_from_seed()
-        self._public_key_from_seed()
-        # self._tor_address()
+        except Exception:
+            return
+
         self._info()
-
         return self
 
-    def from_encrypted_seed(self, password: str, encrypted_seed: dict):
+    def from_encrypted_seed(self, password: str, encrypted_seed: Union[dict, str]):
         """
         Initialize new epic-wallet instance from previously encrypted seed
+        Provide full path to wallet seed file or valid dict with data
+        :param password: string, must be the same as one when encryption was done ('' blank is possible)
+        :param encrypted_seed: str if path to file, dict if python object
         :return: wallet instance
         """
-        seed = self._decrypt_seed(password=password, data=encrypted_seed)
 
-        if seed:
-            self.from_seed(seed)
-            return self
+        # Handle no password
+        if password is None:
+            print(f'ERROR: Provide encryption password')
+
+        # Handle if provided path to seed file
+        if isinstance(encrypted_seed, str):
+            if os.path.isfile(encrypted_seed):
+                try:
+                    encrypted_seed = json.load(open(encrypted_seed, 'r'))
+                except Exception as e:
+                    print(f'ERROR: Invalid wallet seed file\n{encrypted_seed}\n{e}')
+                    return
+            else:
+                print(f'ERROR: {encrypted_seed} is an invalid path or wallet seed file')
+                return
+
+        # Validate that data is dictionary instance
+        if isinstance(encrypted_seed, dict):
+            seed = self._decrypt_seed(password=password, data=encrypted_seed)
+
+            if seed:
+                self.from_seed(seed)
+                return self
+            else:
+                print(f'ERROR: Wrong encryption password?')
+        else:
+            print(f'ERROR: {encrypted_seed} is not valid encrypted seed file data')
 
     def from_mnemonic(self, mnemonics: Union[str, list]):
         """
@@ -265,8 +317,9 @@ class WalletSeed:
         if isinstance(mnemonics, list):
             mnemonics = ' '.join(mnemonics)
 
-        if self._valid_mnemonics(mnemonics):
-            raise Exception('Invalid mnemonics')
+        if not self._valid_mnemonics(mnemonics):
+            print('Invalid mnemonics')
+            return
 
         mnemonic_obj = mnemonic.Mnemonic("english")
         seed = bytes(mnemonic_obj.to_entropy(mnemonics))
@@ -274,24 +327,37 @@ class WalletSeed:
 
         return self
 
-    def save_to_file(self, path: str = None):
+    def save_to_file(self, password: str, path: str = None):
         """
-        Save wallet encrypted seed to file (JSON)
+        Save wallet encrypted seed to file (JSON format)
+        :param password: str, to encrypt the wallet seed
         :param path: str, optional path to wallet encrypted seed file
         """
+        # Handle no wallet seed
+        if not self.seed:
+            print('ERROR: Wallet is not initialized (no seed)')
+            return
+
         # Set current working directory as path if not provided
         if not path:
             path = os.getcwd()
 
-        file_path = os.path.join(path, self.SEED_FILE_NAME)
+        # Handle case with and without file name in path
+        if not path.endswith(self.SEED_FILE_NAME):
+            file_path = os.path.join(path, self.SEED_FILE_NAME)
+        else:
+            file_path = path
 
-        # Handle existing wallet.seed and make backup
+        # Handle existing 'wallet.seed' file and make backup
         if os.path.isfile(file_path):
             print('Wallet seed file already exist in this directory, making backup..')
+
+            # Prepare path, file name and make backup
             backup_file_name = f"backup_{int(time.time())}_{self.SEED_FILE_NAME}"
             backup_path = os.path.join(path, backup_file_name)
             os.rename(file_path, backup_path)
-            print(f'"{backup_file_name}" saved in {path}')
+            print(f'"{self.SEED_FILE_NAME}" renamed to: "{backup_file_name}"')
 
-        self._encrypted_seed_to_file(path=file_path)
-        print(f"Wallet seed file created successfully")
+        # Save encrypted seed dict to file in JSON format
+        self._encrypted_seed_to_file(password=password, path=file_path)
+        print(f"Wallet seed encrypted and saved in: '{self.SEED_FILE_NAME}' file.")

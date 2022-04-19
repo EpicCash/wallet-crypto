@@ -12,13 +12,13 @@
 `pip install cryptography`
 
 `pip install mnemonic`
-
 ## How to use
 ```
 from seed import WalletSeed
 
 your_password = "YOUR PASSWORD"
 your_mnemonics = "YOUR MNEMONIC SEED PHRASE"
+your_path_to_seed = "PATH TO WALLET.SEED"
 
 
 # Create new wallet:
@@ -31,8 +31,8 @@ wallet = WalletSeed(mnemonics=your_mnemonics)
 print(wallet.info)
 
 
-# Import wallet from existing wallet.seed file:
-encrypted_seed_dict = json.load(open('wallet.seed', 'r'))
-wallet = WalletSeed(password=your_password, encrypted_seed=encrypted_seed_dict)
+# Import wallet from existing 'wallet.seed' file:
+wallet = WalletSeed(password=your_password, 
+                    encrypted_seed=your_path_to_seed)
 print(wallet.info)
 ```
